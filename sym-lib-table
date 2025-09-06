@@ -1,0 +1,6 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "RPX-2.5-R")(type "KiCad")(uri "${KIPRJMOD}/libs/RPX-2.5-R/RPX-2.5-R.kicad_sym")(options "")(descr ""))
+  (lib (name "LEG-24")(type "KiCad")(uri "${KIPRJMOD}/libs/LEG-24/LEG-24.kicad_sym")(options "")(descr ""))
+  (lib (name "ADM3251EARWZ-REEL")(type "KiCad")(uri "${KIPRJMOD}/libs/ADM3251EARWZ-REEL/ADM3251EARWZ-REEL.kicad_sym")(options "")(descr ""))
+)
