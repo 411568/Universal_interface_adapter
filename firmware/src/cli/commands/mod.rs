@@ -8,10 +8,12 @@
 mod echo;
 mod setup;
 mod clear;
+mod led;
 
 pub use echo::EchoCommand;
 pub use setup::SetupCommand;
 pub use clear::ClearCommand;
+pub use led::LedCommand;
 
 use crate::cli::Command;
 use crate::io_interface::serial::SerialIO;
@@ -26,6 +28,7 @@ pub enum CommandType {
     Echo(EchoCommand),
     Setup(SetupCommand),
     Clear(ClearCommand),
+    Led(LedCommand),
 }
 
 impl CommandType {
@@ -34,6 +37,7 @@ impl CommandType {
             CommandType::Echo(cmd) => cmd.name(),
             CommandType::Setup(cmd) => cmd.name(),
             CommandType::Clear(cmd) => cmd.name(),
+            CommandType::Led(cmd) => cmd.name(),
         }
     }
     
@@ -42,6 +46,7 @@ impl CommandType {
             CommandType::Echo(cmd) => cmd.initialize(),
             CommandType::Setup(cmd) => cmd.initialize(),
             CommandType::Clear(cmd) => cmd.initialize(),
+            CommandType::Led(cmd) => cmd.initialize(),
         }
     }
     
@@ -50,6 +55,7 @@ impl CommandType {
             CommandType::Echo(cmd) => cmd.execute(args, output, config),
             CommandType::Setup(cmd) => cmd.execute(args, output, config),
             CommandType::Clear(cmd) => cmd.execute(args, output, config),
+            CommandType::Led(cmd) => cmd.execute(args, output, config),
         }
     }
     
@@ -58,6 +64,7 @@ impl CommandType {
             CommandType::Echo(cmd) => cmd.print_help(output),
             CommandType::Setup(cmd) => cmd.print_help(output),
             CommandType::Clear(cmd) => cmd.print_help(output),
+            CommandType::Led(cmd) => cmd.print_help(output),
         }
     }
 }
@@ -82,6 +89,10 @@ impl CommandRegistry {
     
     pub fn register_echo(&mut self, command: EchoCommand) -> Result<(), &'static str> {
         self.register(CommandType::Echo(command))
+    }
+
+    pub fn register_led(&mut self, command: LedCommand) -> Result<(), &'static str> {
+        self.register(CommandType::Led(command))
     }
     
     pub fn register_setup(&mut self, command: SetupCommand) -> Result<(), &'static str> {

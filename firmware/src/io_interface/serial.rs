@@ -4,7 +4,6 @@ use usbd_serial::SerialPort;
 use core::fmt::{Write as FmtWrite, Result as FmtResult};
 use stm32f4xx_hal::otg_fs::{UsbBus, USB};
 
-use crate::cli::cli_config::AnsiColor;
 
 /// Serial IO abstraction for USB CDC on STM32
 pub struct SerialIO {
