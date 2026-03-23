@@ -25,7 +25,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -34,7 +34,7 @@ static EP_MEMORY: ConstStaticCell<[u32; 1024]> = ConstStaticCell::new([0; 1024])
 static USB_BUS: StaticCell<Option<UsbBusAllocator<UsbBus<USB>>>> = StaticCell::new();
 
 
-fn initialize_serial() -> SerialIO {
+fn initialize_peripherals() -> SerialIO {
     let dp = pac::Peripherals::take().unwrap();
     // let cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
@@ -46,6 +46,8 @@ fn initialize_serial() -> SerialIO {
     // Split the GPIO
     let gpioa = dp.GPIOA.split(&mut rcc);
     let gpiod = dp.GPIOD.split(&mut rcc);
+    let gpioc = dp.GPIOC.split(&mut rcc);
+    let gpioe = dp.GPIOE.split(&mut rcc);
 
     // Initialize LED pins
     LedCommand::init_pins(
@@ -53,6 +55,35 @@ fn initialize_serial() -> SerialIO {
         gpiod.pd5,
         gpiod.pd6,
         gpiod.pd7,
+    );
+
+    // Initialize the MOSFET pins
+    MosfetCommand::init_pins(
+        gpioc.pc6,
+        gpioc.pc7,
+        gpioc.pc8,
+        gpioc.pc9,
+    );
+
+    // Initialize the Relay pins
+    RelayCommand::init_pins(
+        gpioe.pe0,
+        gpioe.pe1,
+    );
+
+    // Initialize the Isolated Input pins
+    IsolatedInputCommand::init_pins(
+        gpioe.pe2,
+        gpioe.pe3,
+        gpioe.pe4,
+    );
+
+    // Initialize the GPIO pins
+    GpioCommand::init_pins(
+        gpiod.pd12,
+        gpiod.pd13,
+        gpiod.pd14,
+        gpiod.pd15,
     );
 
     // Create the USB device
@@ -85,7 +116,7 @@ fn initialize_serial() -> SerialIO {
 #[entry]
 fn main() -> ! {
     // Initialize serial interface (also sets up LEDs)
-    let mut serial_io = initialize_serial();
+    let mut serial_io = initialize_peripherals();
     
     // Small delay for USB enumeration
     for _ in 0..100_000 {
@@ -101,6 +132,10 @@ fn main() -> ! {
     let _ = registry.register_setup(SetupCommand::new());
     let _ = registry.register_clear(ClearCommand::new());
     let _ = registry.register_led(LedCommand::new());
+    let _ = registry.register_mosfets(MosfetCommand::new());
+    let _ = registry.register_relays(RelayCommand::new());
+    let _ = registry.register_isolated_inputs(IsolatedInputCommand::new());
+    let _ = registry.register_gpios(GpioCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {

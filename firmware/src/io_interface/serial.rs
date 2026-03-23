@@ -32,12 +32,25 @@ impl SerialIO {
         }
     }
 
+    /// Write all bytes to USB serial, retrying on partial writes and WouldBlock.
+    fn write_all(&mut self, mut bytes: &[u8]) -> Result<(), usb_device::UsbError> {
+        while !bytes.is_empty() {
+            self.poll();
+            match self.serial.write(bytes) {
+                Ok(0) => {}
+                Ok(written) => {
+                    bytes = &bytes[written..];
+                }
+                Err(usb_device::UsbError::WouldBlock) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
     /// Write string to USB serial
     pub fn write_str(&mut self, s: &str) -> Result<(), usb_device::UsbError> {
-        match self.serial.write(s.as_bytes()) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
+        self.write_all(s.as_bytes())
     }
 
     /// Write a string in a specified color
@@ -49,7 +62,8 @@ impl SerialIO {
 
     /// Write byte slice to USB serial
     pub fn write_bytes(&mut self, bytes: &[u8]) -> Result<usize, usb_device::UsbError> {
-        self.serial.write(bytes)
+        self.write_all(bytes)?;
+        Ok(bytes.len())
     }
 
     /// Read bytes from USB serial (non-blocking)

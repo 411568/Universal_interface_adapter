@@ -9,11 +9,19 @@ mod echo;
 mod setup;
 mod clear;
 mod led;
+mod mosfets;
+mod relays;
+mod isolated_inputs;
+mod gpios; 
 
 pub use echo::EchoCommand;
 pub use setup::SetupCommand;
 pub use clear::ClearCommand;
 pub use led::LedCommand;
+pub use mosfets::MosfetCommand;
+pub use relays::RelayCommand;
+pub use isolated_inputs::IsolatedInputCommand;
+pub use gpios::GpioCommand;
 
 use crate::cli::Command;
 use crate::io_interface::serial::SerialIO;
@@ -29,44 +37,105 @@ pub enum CommandType {
     Setup(SetupCommand),
     Clear(ClearCommand),
     Led(LedCommand),
+    Mosfets(MosfetCommand),
+    Relays(RelayCommand),
+    IsolatedInputs(IsolatedInputCommand),
+    Gpios(GpioCommand),
 }
+
+macro_rules! impl_command_dispatch {
+    ($self:expr, $method:ident, $($variant:ident),+) => {
+        match $self {
+            $(CommandType::$variant(cmd) => cmd.$method(),)+
+        }
+    };
+}
+
+macro_rules! impl_command_execute {
+    ($self:expr, $args:expr, $output:expr, $config:expr, $($variant:ident),+) => {
+        match $self {
+            $(CommandType::$variant(cmd) => cmd.execute($args, $output, $config),)+
+        }
+    };
+}
+
+macro_rules! impl_command_print_help {
+    ($self:expr, $output:expr, $($variant:ident),+) => {
+        match $self {
+            $(CommandType::$variant(cmd) => cmd.print_help($output),)+
+        }
+    };
+}
+
 
 impl CommandType {
     pub fn name(&self) -> &'static str {
-        match self {
-            CommandType::Echo(cmd) => cmd.name(),
-            CommandType::Setup(cmd) => cmd.name(),
-            CommandType::Clear(cmd) => cmd.name(),
-            CommandType::Led(cmd) => cmd.name(),
-        }
+        impl_command_dispatch!(self, name, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
     }
-    
+
+    // pub fn name(&self) -> &'static str {
+    //     match self {
+    //         CommandType::Echo(cmd) => cmd.name(),
+    //         CommandType::Setup(cmd) => cmd.name(),
+    //         CommandType::Clear(cmd) => cmd.name(),
+    //         CommandType::Led(cmd) => cmd.name(),
+    //         CommandType::Mosfets(cmd) => cmd.name(),
+    //         CommandType::Relays(cmd) => cmd.name(),
+    //         CommandType::IsolatedInputs(cmd) => cmd.name(),
+    //         CommandType::Gpios(cmd) => cmd.name(),
+    //     }
+    // }
+
     pub fn initialize(&mut self) -> Result<(), &'static str> {
-        match self {
-            CommandType::Echo(cmd) => cmd.initialize(),
-            CommandType::Setup(cmd) => cmd.initialize(),
-            CommandType::Clear(cmd) => cmd.initialize(),
-            CommandType::Led(cmd) => cmd.initialize(),
-        }
+        impl_command_dispatch!(self, initialize, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
     }
     
+    // pub fn initialize(&mut self) -> Result<(), &'static str> {
+    //     match self {
+    //         CommandType::Echo(cmd) => cmd.initialize(),
+    //         CommandType::Setup(cmd) => cmd.initialize(),
+    //         CommandType::Clear(cmd) => cmd.initialize(),
+    //         CommandType::Led(cmd) => cmd.initialize(),
+    //         CommandType::Mosfets(cmd) => cmd.initialize(),
+    //         CommandType::Relays(cmd) => cmd.initialize(),
+    //         CommandType::IsolatedInputs(cmd) => cmd.initialize(),
+    //         CommandType::Gpios(cmd) => cmd.initialize(),
+    //     }
+    // }
+
     pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
-        match self {
-            CommandType::Echo(cmd) => cmd.execute(args, output, config),
-            CommandType::Setup(cmd) => cmd.execute(args, output, config),
-            CommandType::Clear(cmd) => cmd.execute(args, output, config),
-            CommandType::Led(cmd) => cmd.execute(args, output, config),
-        }
+        impl_command_execute!(self, args, output, config, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
+    }
+
+    // pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
+    //     match self {
+    //         CommandType::Echo(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Setup(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Clear(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Led(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Mosfets(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Relays(cmd) => cmd.execute(args, output, config),
+    //         CommandType::IsolatedInputs(cmd) => cmd.execute(args, output, config),
+    //         CommandType::Gpios(cmd) => cmd.execute(args, output, config),
+    //     }
+    // }
+
+    pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
+        impl_command_print_help!(self, output, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
     }
     
-    pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
-        match self {
-            CommandType::Echo(cmd) => cmd.print_help(output),
-            CommandType::Setup(cmd) => cmd.print_help(output),
-            CommandType::Clear(cmd) => cmd.print_help(output),
-            CommandType::Led(cmd) => cmd.print_help(output),
-        }
-    }
+    // pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
+    //     match self {
+    //         CommandType::Echo(cmd) => cmd.print_help(output),
+    //         CommandType::Setup(cmd) => cmd.print_help(output),
+    //         CommandType::Clear(cmd) => cmd.print_help(output),
+    //         CommandType::Led(cmd) => cmd.print_help(output),
+    //         CommandType::Mosfets(cmd) => cmd.print_help(output),
+    //         CommandType::Relays(cmd) => cmd.print_help(output),
+    //         CommandType::IsolatedInputs(cmd) => cmd.print_help(output),
+    //         CommandType::Gpios(cmd) => cmd.print_help(output),
+    //     }
+    // }
 }
 
 /// Registry to store and manage commands
@@ -101,6 +170,22 @@ impl CommandRegistry {
     
     pub fn register_clear(&mut self, command: ClearCommand) -> Result<(), &'static str> {
         self.register(CommandType::Clear(command))
+    }
+
+    pub fn register_mosfets(&mut self, command: MosfetCommand) -> Result<(), &'static str> {
+        self.register(CommandType::Mosfets(command))
+    }
+
+    pub fn register_relays(&mut self, command: RelayCommand) -> Result<(), &'static str> {
+        self.register(CommandType::Relays(command))
+    }
+
+    pub fn register_isolated_inputs(&mut self, command: IsolatedInputCommand) -> Result<(), &'static str> {
+        self.register(CommandType::IsolatedInputs(command))
+    }
+
+    pub fn register_gpios(&mut self, command: GpioCommand) -> Result<(), &'static str> {
+        self.register(CommandType::Gpios(command))
     }
     
     fn register(&mut self, command: CommandType) -> Result<(), &'static str> {
