@@ -13,6 +13,7 @@ mod mosfets;
 mod relays;
 mod isolated_inputs;
 mod gpios; 
+mod uart;
 
 pub use echo::EchoCommand;
 pub use setup::SetupCommand;
@@ -22,6 +23,7 @@ pub use mosfets::MosfetCommand;
 pub use relays::RelayCommand;
 pub use isolated_inputs::IsolatedInputCommand;
 pub use gpios::GpioCommand;
+pub use uart::UartCommand;
 
 use crate::cli::Command;
 use crate::io_interface::serial::SerialIO;
@@ -41,6 +43,7 @@ pub enum CommandType {
     Relays(RelayCommand),
     IsolatedInputs(IsolatedInputCommand),
     Gpios(GpioCommand),
+    Uart(UartCommand),
 }
 
 macro_rules! impl_command_dispatch {
@@ -70,7 +73,7 @@ macro_rules! impl_command_print_help {
 
 impl CommandType {
     pub fn name(&self) -> &'static str {
-        impl_command_dispatch!(self, name, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
+        impl_command_dispatch!(self, name, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
     }
 
     // pub fn name(&self) -> &'static str {
@@ -87,7 +90,7 @@ impl CommandType {
     // }
 
     pub fn initialize(&mut self) -> Result<(), &'static str> {
-        impl_command_dispatch!(self, initialize, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
+        impl_command_dispatch!(self, initialize, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
     }
     
     // pub fn initialize(&mut self) -> Result<(), &'static str> {
@@ -104,7 +107,7 @@ impl CommandType {
     // }
 
     pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
-        impl_command_execute!(self, args, output, config, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
+        impl_command_execute!(self, args, output, config, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
     }
 
     // pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
@@ -121,7 +124,7 @@ impl CommandType {
     // }
 
     pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
-        impl_command_print_help!(self, output, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios)
+        impl_command_print_help!(self, output, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
     }
     
     // pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
@@ -186,6 +189,10 @@ impl CommandRegistry {
 
     pub fn register_gpios(&mut self, command: GpioCommand) -> Result<(), &'static str> {
         self.register(CommandType::Gpios(command))
+    }
+
+    pub fn register_uart(&mut self, command: UartCommand) -> Result<(), &'static str> {
+        self.register(CommandType::Uart(command))
     }
     
     fn register(&mut self, command: CommandType) -> Result<(), &'static str> {

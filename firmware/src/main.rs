@@ -16,6 +16,7 @@ use static_cell::StaticCell;
 use stm32f4xx_hal::otg_fs::{UsbBus, USB};
 use stm32f4xx_hal::rcc::Config;
 use stm32f4xx_hal::{pac, prelude::*};
+use stm32f4xx_hal::serial;
 use usb_device::prelude::*;
 use usb_device::bus::UsbBusAllocator;
 
@@ -25,7 +26,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -86,6 +87,26 @@ fn initialize_peripherals() -> SerialIO {
         gpiod.pd15,
     );
 
+     // Initialize UART1 (USART2) - Example pins PA2/PA3
+    let uart1_tx = gpioa.pa2.into_alternate();
+    let uart1_rx = gpioa.pa3.into_alternate();
+    let uart1 = dp.USART2.serial(
+        (uart1_tx, uart1_rx),
+        serial::config::Config::default().baudrate(9600.bps()),
+        &mut rcc,
+    ).unwrap();
+    UartCommand::init_uart1(uart1);
+
+    // Initialize UART2 (USART3) - Example pins PB10/PB11 or PC10/PC11
+    let uart2_tx = gpioc.pc10.into_alternate(); 
+    let uart2_rx = gpioc.pc11.into_alternate(); 
+    let uart2 = dp.USART3.serial(
+        (uart2_tx, uart2_rx),
+        serial::config::Config::default().baudrate(9600.bps()),
+        &mut rcc,
+    ).unwrap();
+    UartCommand::init_uart2(uart2);
+
     // Create the USB device
     let usb = USB::new(
         (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
@@ -136,6 +157,7 @@ fn main() -> ! {
     let _ = registry.register_relays(RelayCommand::new());
     let _ = registry.register_isolated_inputs(IsolatedInputCommand::new());
     let _ = registry.register_gpios(GpioCommand::new());
+    let _ = registry.register_uart(UartCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {
