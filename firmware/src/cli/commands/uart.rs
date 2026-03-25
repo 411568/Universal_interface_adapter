@@ -430,7 +430,6 @@ impl Command for UartCommand {
         out.write_str("  uart 1 baud 115200\r\n")?;
         out.write_str("  uart 2 write Hello World\r\n")?;
         out.write_str("  uart 1 passthrough\r\n")?;
-        out.write_str("\r\nNote: RS232, RS422, RS485 commands reserved for future use\r\n")?;
         Ok(())
     }
 }
