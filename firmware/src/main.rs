@@ -26,7 +26,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -46,6 +46,7 @@ fn initialize_peripherals() -> SerialIO {
 
     // Split the GPIO
     let gpioa = dp.GPIOA.split(&mut rcc);
+    let gpiob = dp.GPIOB.split(&mut rcc);
     let gpiod = dp.GPIOD.split(&mut rcc);
     let gpioc = dp.GPIOC.split(&mut rcc);
     let gpioe = dp.GPIOE.split(&mut rcc);
@@ -97,15 +98,37 @@ fn initialize_peripherals() -> SerialIO {
     ).unwrap();
     UartCommand::init_uart1(uart1);
 
-    // Initialize UART2 (USART3) - Example pins PB10/PB11 or PC10/PC11
+    // Initialize UART2 (UART4) - Example pins PC10/PC11
     let uart2_tx = gpioc.pc10.into_alternate(); 
     let uart2_rx = gpioc.pc11.into_alternate(); 
-    let uart2 = dp.USART3.serial(
+    let uart2 = dp.UART4.serial(
         (uart2_tx, uart2_rx),
         serial::config::Config::default().baudrate(9600.bps()),
         &mut rcc,
     ).unwrap();
     UartCommand::init_uart2(uart2);
+
+    // Initialize RS422 (USART1) with control pins
+    let rs422_tx = gpioe.pe8.into_alternate();
+    let rs422_rx = gpioe.pe7.into_alternate();
+    let rs422_re = gpioe.pe9.into_push_pull_output(); // RE pin (active LOW)
+    let rs422_de = gpiob.pb2.into_push_pull_output(); // DE pin (active HIGH)
+    let rs422 = dp.UART5.serial(
+        (rs422_tx, rs422_rx),
+        serial::config::Config::default().baudrate(9600.bps()),
+        &mut rcc,
+    ).unwrap();
+    Rs422Command::init(rs422, rs422_re, rs422_de);
+
+    // Initialize RS232 (UART4)
+    let rs232_tx = gpiod.pd8.into_alternate();
+    let rs232_rx = gpioc.pc5.into_alternate();
+    let rs232 = dp.USART3.serial(
+        (rs232_tx, rs232_rx),
+        serial::config::Config::default().baudrate(9600.bps()),
+        &mut rcc,
+    ).unwrap();
+    Rs232Command::init(rs232);
 
     // Create the USB device
     let usb = USB::new(
@@ -158,6 +181,8 @@ fn main() -> ! {
     let _ = registry.register_isolated_inputs(IsolatedInputCommand::new());
     let _ = registry.register_gpios(GpioCommand::new());
     let _ = registry.register_uart(UartCommand::new());
+    let _ = registry.register_rs422(Rs422Command::new());
+    let _ = registry.register_rs232(Rs232Command::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {

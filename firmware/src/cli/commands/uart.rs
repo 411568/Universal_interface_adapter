@@ -11,8 +11,8 @@ use nb::block;
 
 type Uart1Rx = Rx<hal::pac::USART2>;
 type Uart1Tx = Tx<hal::pac::USART2>;
-type Uart2Rx = Rx<hal::pac::USART3>;
-type Uart2Tx = Tx<hal::pac::USART3>;
+type Uart2Rx = Rx<hal::pac::UART4>;
+type Uart2Tx = Tx<hal::pac::UART4>;
 
 // UART 1 (USART2)
 static UART1_RX: Mutex<RefCell<Option<Uart1Rx>>> = Mutex::new(RefCell::new(None));
@@ -57,7 +57,7 @@ impl UartCommand {
         });
     }
 
-    pub fn init_uart2(serial: Serial<hal::pac::USART3>) {
+    pub fn init_uart2(serial: Serial<hal::pac::UART4>) {
         let (tx, rx) = serial.split();
         cortex_m::interrupt::free(|cs| {
             *UART2_RX.borrow(cs).borrow_mut() = Some(rx);
@@ -419,7 +419,7 @@ impl Command for UartCommand {
 
     fn print_help(&self, out: &mut SerialIO) -> Result<(), UsbError> {
         out.write_str("uart <1|2> <subcommand> [args] - UART/Serial communication\r\n")?;
-        out.write_str("UART 1 = USART2, UART 2 = USART3\r\n")?;
+        out.write_str("UART 1 = USART2, UART 2 = UART4\r\n")?;
         out.write_str("Subcommands:\r\n")?;
         out.write_str("  stop_bit <1|2>    - Set stop bits (1 or 2)\r\n")?;
         out.write_str("  parity <0|1|2>    - Set parity (0=none, 1=even, 2=odd)\r\n")?;

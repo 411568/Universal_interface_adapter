@@ -14,6 +14,8 @@ mod relays;
 mod isolated_inputs;
 mod gpios; 
 mod uart;
+mod rs422;
+mod rs232;
 
 pub use echo::EchoCommand;
 pub use setup::SetupCommand;
@@ -24,6 +26,8 @@ pub use relays::RelayCommand;
 pub use isolated_inputs::IsolatedInputCommand;
 pub use gpios::GpioCommand;
 pub use uart::UartCommand;
+pub use rs422::Rs422Command;
+pub use rs232::Rs232Command;
 
 use crate::cli::Command;
 use crate::io_interface::serial::SerialIO;
@@ -31,7 +35,7 @@ use crate::cli::CliConfig;
 use usb_device::UsbError;
 
 /// Maximum number of commands that can be registered
-const MAX_COMMANDS: usize = 10;
+const MAX_COMMANDS: usize = 12;
 
 /// Enum of all possible command types
 pub enum CommandType {
@@ -44,6 +48,8 @@ pub enum CommandType {
     IsolatedInputs(IsolatedInputCommand),
     Gpios(GpioCommand),
     Uart(UartCommand),
+    Rs422(Rs422Command),
+    Rs232(Rs232Command),
 }
 
 macro_rules! impl_command_dispatch {
@@ -73,7 +79,7 @@ macro_rules! impl_command_print_help {
 
 impl CommandType {
     pub fn name(&self) -> &'static str {
-        impl_command_dispatch!(self, name, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
+        impl_command_dispatch!(self, name, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart, Rs422, Rs232)
     }
 
     // pub fn name(&self) -> &'static str {
@@ -90,7 +96,7 @@ impl CommandType {
     // }
 
     pub fn initialize(&mut self) -> Result<(), &'static str> {
-        impl_command_dispatch!(self, initialize, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
+        impl_command_dispatch!(self, initialize, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart, Rs422, Rs232)
     }
     
     // pub fn initialize(&mut self) -> Result<(), &'static str> {
@@ -107,7 +113,7 @@ impl CommandType {
     // }
 
     pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
-        impl_command_execute!(self, args, output, config, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
+        impl_command_execute!(self, args, output, config, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart, Rs422, Rs232)
     }
 
     // pub fn execute(&mut self, args: &[&str], output: &mut SerialIO, config: &mut CliConfig) -> Result<(), UsbError> {
@@ -124,7 +130,7 @@ impl CommandType {
     // }
 
     pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
-        impl_command_print_help!(self, output, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart)
+        impl_command_print_help!(self, output, Echo, Setup, Clear, Led, Mosfets, Relays, IsolatedInputs, Gpios, Uart, Rs422, Rs232)
     }
     
     // pub fn print_help(&self, output: &mut SerialIO) -> Result<(), UsbError> {
@@ -154,6 +160,7 @@ impl CommandRegistry {
             commands: [
                 None, None, None, None, None,
                 None, None, None, None, None,
+                None, None,
             ],
             count: 0,
         }
@@ -193,6 +200,14 @@ impl CommandRegistry {
 
     pub fn register_uart(&mut self, command: UartCommand) -> Result<(), &'static str> {
         self.register(CommandType::Uart(command))
+    }
+
+    pub fn register_rs422(&mut self, command: Rs422Command) -> Result<(), &'static str> {
+        self.register(CommandType::Rs422(command))
+    }
+
+    pub fn register_rs232(&mut self, command: Rs232Command) -> Result<(), &'static str> {
+        self.register(CommandType::Rs232(command))
     }
     
     fn register(&mut self, command: CommandType) -> Result<(), &'static str> {
