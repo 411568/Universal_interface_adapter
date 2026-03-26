@@ -17,6 +17,8 @@ use stm32f4xx_hal::otg_fs::{UsbBus, USB};
 use stm32f4xx_hal::rcc::Config;
 use stm32f4xx_hal::{pac, prelude::*};
 use stm32f4xx_hal::serial;
+use stm32f4xx_hal::adc::{Adc, config::AdcConfig};
+use stm32f4xx_hal::dac::{dac, DacPin};
 use usb_device::prelude::*;
 use usb_device::bus::UsbBusAllocator;
 
@@ -26,7 +28,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -130,6 +132,19 @@ fn initialize_peripherals() -> SerialIO {
     ).unwrap();
     Rs232Command::init(rs232);
 
+    // Initialize ADC and DAC for analog operations
+    let adc_config = AdcConfig::default();
+    let adc = Adc::new(dp.ADC1, true, adc_config, &mut rcc);
+    let adc_pin1 = gpioa.pa0.into_analog();
+    let adc_pin2 = gpioa.pa1.into_analog();
+    
+    // Initialize DAC - PA4 is DAC channel 1
+    let dac_pin = gpioa.pa4.into_analog();
+    let mut dac_ch1 = dac(dp.DAC, dac_pin, &mut rcc);
+    dac_ch1.enable();
+    
+    AnalogCommand::init(adc, adc_pin1, adc_pin2, dac_ch1);
+
     // Create the USB device
     let usb = USB::new(
         (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
@@ -183,6 +198,7 @@ fn main() -> ! {
     let _ = registry.register_uart(UartCommand::new());
     let _ = registry.register_rs422(Rs422Command::new());
     let _ = registry.register_rs232(Rs232Command::new());
+    let _ = registry.register_analog(AnalogCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {
