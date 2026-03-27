@@ -17,6 +17,7 @@ use stm32f4xx_hal::otg_fs::{UsbBus, USB};
 use stm32f4xx_hal::rcc::Config;
 use stm32f4xx_hal::{pac, prelude::*};
 use stm32f4xx_hal::serial;
+use stm32f4xx_hal::i2c::I2c;
 use stm32f4xx_hal::adc::{Adc, config::AdcConfig};
 use stm32f4xx_hal::dac::{dac, DacPin};
 use usb_device::prelude::*;
@@ -28,7 +29,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand, I2cCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -145,6 +146,28 @@ fn initialize_peripherals() -> SerialIO {
     
     AnalogCommand::init(adc, adc_pin1, adc_pin2, dac_ch1);
 
+    // Initialize I2C1 - PB6 (SCL), PB7 (SDA)
+    let i2c1_scl = gpiob.pb6.into_alternate_open_drain();
+    let i2c1_sda = gpiob.pb7.into_alternate_open_drain();
+    let i2c1 = I2c::new(
+        dp.I2C1,
+        (i2c1_scl, i2c1_sda),
+        100.kHz(),
+        &mut rcc,
+    );
+    I2cCommand::init_i2c1(i2c1);
+
+    // Initialize I2C2 - PB10 (SCL), PC12 (SDA)
+    let i2c2_scl = gpiob.pb10.into_alternate_open_drain();
+    let i2c2_sda = gpioc.pc12.into_alternate_open_drain();
+    let i2c2 = I2c::new(
+        dp.I2C2,
+        (i2c2_scl, i2c2_sda),
+        100.kHz(),
+        &mut rcc,
+    );
+    I2cCommand::init_i2c2(i2c2);
+
     // Create the USB device
     let usb = USB::new(
         (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
@@ -199,6 +222,7 @@ fn main() -> ! {
     let _ = registry.register_rs422(Rs422Command::new());
     let _ = registry.register_rs232(Rs232Command::new());
     let _ = registry.register_analog(AnalogCommand::new());
+    let _ = registry.register_i2c(I2cCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {

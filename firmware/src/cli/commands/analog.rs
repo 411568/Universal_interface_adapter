@@ -1,6 +1,5 @@
-// TODO 
-// Add the analog format command to switch between raw and millivolt output
-// Add error handling for when the user types value out of range or invalid resistor values
+// Analog command handler with format switching support
+// Usage: analog format <0|1> - switch between raw (0) and millivolt (1) output
 
 use crate::cli::{CliConfig, Command};
 use crate::io_interface::serial::SerialIO;
@@ -418,12 +417,19 @@ impl Command for AnalogCommand {
         cfg: &mut CliConfig,
     ) -> Result<(), UsbError> {
         if args.is_empty() {
-            out.write_str("Usage: analog <in|out> [args]\r\n")?;
+            out.write_str("Usage: analog <in|out|format> [args]\r\n")?;
             out.write_str("Type 'help analog' for more information\r\n")?;
             return Ok(());
         }
 
         match args[0] {
+            "format" => {
+                if args.len() != 2 {
+                    out.write_str("Usage: analog format <0|1|raw|mv>\r\n")?;
+                    return Ok(());
+                }
+                self.set_format(args[1], out, cfg)
+            }
             "in" => {
                 if args.len() < 2 {
                     out.write_str("Usage: analog in <channel|set_amp|continuous> [args]\r\n")?;
@@ -510,15 +516,17 @@ impl Command for AnalogCommand {
                 }
             }
             _ => {
-                out.write_str("Unknown subcommand. Use: in or out\r\n")?;
+                out.write_str("Unknown subcommand. Use: in, out, or format\r\n")?;
                 Ok(())
             }
         }
     }
 
     fn print_help(&self, out: &mut SerialIO) -> Result<(), UsbError> {
-        out.write_str("analog <in|out> [args] - Analog ADC/DAC operations\r\n")?;
+        out.write_str("analog <in|out|format> [args] - Analog ADC/DAC operations\r\n")?;
         out.write_str("ADC inputs: PA0 (ch1), PA1 (ch2) | DAC output: PA4\r\n")?;
+        out.write_str("\r\nFormat Commands:\r\n")?;
+        out.write_str("  analog format <0|1>          - Set output format (0=raw, 1=mV)\r\n")?;
         out.write_str("\r\nADC Input Commands:\r\n")?;
         out.write_str("  analog in <1|2>              - Read ADC channel (0-4095)\r\n")?;
         out.write_str("  analog in set_amp <1|2> <R>  - Set amplification (1.5k, 3.3k, 10k)\r\n")?;
@@ -527,6 +535,8 @@ impl Command for AnalogCommand {
         out.write_str("  analog out value <0-4095>    - Set DAC output value (12-bit)\r\n")?;
         out.write_str("  analog out set_amp <R>       - Set amplification (30k, 15k, 0)\r\n")?;
         out.write_str("\r\nExamples:\r\n")?;
+        out.write_str("  analog format 0              - Use raw output\r\n")?;
+        out.write_str("  analog format 1              - Use millivolt output\r\n")?;
         out.write_str("  analog in 1                  - Read channel 1\r\n")?;
         out.write_str("  analog in set_amp 1 3.3k     - Set ch1 to 3.3k gain\r\n")?;
         out.write_str("  analog in continuous 2       - Continuous read ch2\r\n")?;
