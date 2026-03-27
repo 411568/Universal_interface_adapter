@@ -19,6 +19,7 @@ use stm32f4xx_hal::{pac, prelude::*};
 use stm32f4xx_hal::serial;
 use stm32f4xx_hal::i2c::I2c;
 use stm32f4xx_hal::spi::{Spi, Mode, Phase, Polarity};
+use stm32f4xx_hal::can::CanExt;
 use stm32f4xx_hal::adc::{Adc, config::AdcConfig};
 use stm32f4xx_hal::dac::{dac, DacPin};
 use usb_device::prelude::*;
@@ -30,7 +31,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand, I2cCommand, SpiCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand, I2cCommand, SpiCommand, CanCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -201,6 +202,13 @@ fn initialize_peripherals() -> SerialIO {
     );
     SpiCommand::init_spi2(spi2);
 
+    // Initialize CAN1 (PD0 = CAN_RX, PD1 = CAN_TX)
+    let can_rx = gpiod.pd0.into_alternate();
+    let can_tx = gpiod.pd1.into_alternate();
+    
+    let can1 = dp.CAN1.can((can_tx, can_rx), &mut rcc);
+    CanCommand::init_can(can1);
+
     // Create the USB device
     let usb = USB::new(
         (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
@@ -257,6 +265,7 @@ fn main() -> ! {
     let _ = registry.register_analog(AnalogCommand::new());
     let _ = registry.register_i2c(I2cCommand::new());
     let _ = registry.register_spi(SpiCommand::new());
+    let _ = registry.register_can(CanCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {
