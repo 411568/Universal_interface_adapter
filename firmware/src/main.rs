@@ -18,6 +18,7 @@ use stm32f4xx_hal::rcc::Config;
 use stm32f4xx_hal::{pac, prelude::*};
 use stm32f4xx_hal::serial;
 use stm32f4xx_hal::i2c::I2c;
+use stm32f4xx_hal::spi::{Spi, Mode, Phase, Polarity};
 use stm32f4xx_hal::adc::{Adc, config::AdcConfig};
 use stm32f4xx_hal::dac::{dac, DacPin};
 use usb_device::prelude::*;
@@ -29,7 +30,7 @@ mod cli;
 use io_interface::serial::SerialIO;
 use cli::CommandRegistry;
 use cli::CliConfig;
-use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand, I2cCommand};
+use cli::commands::{EchoCommand, ClearCommand, SetupCommand, LedCommand, MosfetCommand, RelayCommand, IsolatedInputCommand, GpioCommand, UartCommand, Rs422Command, Rs232Command, AnalogCommand, I2cCommand, SpiCommand};
 
 
 // Statically allocate memory for USB endpoint buffers
@@ -168,6 +169,38 @@ fn initialize_peripherals() -> SerialIO {
     );
     I2cCommand::init_i2c2(i2c2);
 
+    // Initialize SPI1 (labeled as SPI 2 in documentation) - PA5 (SCK), PA6 (MISO), PA7 (MOSI)
+    let spi1_sck = gpioa.pa5.into_alternate();
+    let spi1_miso = gpioa.pa6.into_alternate();
+    let spi1_mosi = gpioa.pa7.into_alternate();
+    let spi1 = Spi::new(
+        dp.SPI1,
+        (Some(spi1_sck), Some(spi1_miso), Some(spi1_mosi)),
+        Mode {
+            polarity: Polarity::IdleLow,
+            phase: Phase::CaptureOnFirstTransition,
+        },
+        1.MHz(),
+        &mut rcc,
+    );
+    SpiCommand::init_spi1(spi1);
+
+    // Initialize SPI2 (labeled as SPI 1 in documentation) - PB13 (SCK), PB14 (MISO), PB15 (MOSI)
+    let spi2_sck = gpiob.pb13.into_alternate();
+    let spi2_miso = gpiob.pb14.into_alternate();
+    let spi2_mosi = gpiob.pb15.into_alternate();
+    let spi2 = Spi::new(
+        dp.SPI2,
+        (Some(spi2_sck), Some(spi2_miso), Some(spi2_mosi)),
+        Mode {
+            polarity: Polarity::IdleLow,
+            phase: Phase::CaptureOnFirstTransition,
+        },
+        1.MHz(),
+        &mut rcc,
+    );
+    SpiCommand::init_spi2(spi2);
+
     // Create the USB device
     let usb = USB::new(
         (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
@@ -223,6 +256,7 @@ fn main() -> ! {
     let _ = registry.register_rs232(Rs232Command::new());
     let _ = registry.register_analog(AnalogCommand::new());
     let _ = registry.register_i2c(I2cCommand::new());
+    let _ = registry.register_spi(SpiCommand::new());
 
     // Initialize all commands
     if let Err(e) = registry.initialize_all_commands() {
