@@ -1,0 +1,57 @@
+Date : 2026-03-27 21:40:35
+Directory : /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware
+Total : 25 files,  4782 codes, 385 comments, 669 blanks, all 5836 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| Rust     |         24 |      4,737 |        385 |        648 |      5,770 |
+| Markdown |          1 |         45 |          0 |         21 |         66 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                                             | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                                                |         25 |      4,782 |        385 |        669 |      5,836 |
+| . (Files)                                                                                                                                        |          2 |         47 |          0 |         25 |         72 |
+| src                                                                                                                                              |         23 |      4,735 |        385 |        644 |      5,764 |
+| src (Files)                                                                                                                                      |          1 |        203 |         34 |         42 |        279 |
+| src/cli                                                                                                                                          |         20 |      4,459 |        337 |        589 |      5,385 |
+| src/cli (Files)                                                                                                                                  |          4 |        185 |         49 |         37 |        271 |
+| src/cli/commands                                                                                                                                 |         16 |      4,274 |        288 |        552 |      5,114 |
+| src/io_interface                                                                                                                                 |          2 |         73 |         14 |         13 |        100 |
++--------------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                                                                                                         | language | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/README.md                           | Markdown |         45 |          0 |         21 |         66 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/build.rs                            | Rust     |          2 |          0 |          4 |          6 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/cli_config.rs               | Rust     |         69 |         19 |         15 |        103 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/cli_loop.rs                 | Rust     |         99 |         19 |         15 |        133 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/command.rs                  | Rust     |          9 |         11 |          5 |         25 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/analog.rs          | Rust     |        476 |         27 |         61 |        564 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/can.rs             | Rust     |        485 |         26 |         65 |        576 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/clear.rs           | Rust     |         29 |          9 |          9 |         47 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/echo.rs            | Rust     |         48 |         10 |          8 |         66 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/gpios.rs           | Rust     |        297 |         31 |         39 |        367 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/i2c.rs             | Rust     |        447 |         16 |         51 |        514 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/isolated_inputs.rs | Rust     |        120 |          8 |         17 |        145 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/led.rs             | Rust     |        141 |         10 |         19 |        170 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/mod.rs             | Rust     |        220 |         65 |         47 |        332 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/mosfets.rs         | Rust     |        141 |         10 |         19 |        170 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/relays.rs          | Rust     |        129 |         10 |         19 |        158 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/rs232.rs           | Rust     |        282 |          2 |         32 |        316 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/rs422.rs           | Rust     |        322 |          8 |         37 |        367 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/setup.rs           | Rust     |        120 |         15 |         15 |        150 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/spi.rs             | Rust     |        620 |         27 |         72 |        719 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/commands/uart.rs            | Rust     |        397 |         14 |         42 |        453 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/cli/mod.rs                      | Rust     |          8 |          0 |          2 |         10 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/io_interface/mod.rs             | Rust     |          1 |          0 |          0 |          1 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/io_interface/serial.rs          | Rust     |         72 |         14 |         13 |         99 |
+| /home/krzysztof/Documents/ELECTRONICS/universal_interface_adapter_board/universal_interface_adapter/firmware/src/main.rs                         | Rust     |        203 |         34 |         42 |        279 |
+| Total                                                                                                                                            |          |      4,782 |        385 |        669 |      5,836 |
++--------------------------------------------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
