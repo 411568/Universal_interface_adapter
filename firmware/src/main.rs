@@ -101,7 +101,7 @@ fn initialize_peripherals() -> SerialIO {
         serial::config::Config::default().baudrate(9600.bps()),
         &mut rcc,
     ).unwrap();
-    UartCommand::init_uart1(uart1);
+    UartCommand::init_uart1(uart1, rcc.clocks.pclk1().raw());
 
     // Initialize UART2 (UART4) - Example pins PC10/PC11
     let uart2_tx = gpioc.pc10.into_alternate(); 
@@ -111,7 +111,7 @@ fn initialize_peripherals() -> SerialIO {
         serial::config::Config::default().baudrate(9600.bps()),
         &mut rcc,
     ).unwrap();
-    UartCommand::init_uart2(uart2);
+    UartCommand::init_uart2(uart2, rcc.clocks.pclk1().raw());
 
     // Initialize RS422 (USART1) with control pins
     let rs422_tx = gpioe.pe8.into_alternate();
@@ -123,7 +123,7 @@ fn initialize_peripherals() -> SerialIO {
         serial::config::Config::default().baudrate(9600.bps()),
         &mut rcc,
     ).unwrap();
-    Rs422Command::init(rs422, rs422_re, rs422_de);
+    Rs422Command::init(rs422, rs422_re, rs422_de, rcc.clocks.pclk1().raw());
 
     // Initialize RS232 (UART4)
     let rs232_tx = gpiod.pd8.into_alternate();
@@ -133,7 +133,7 @@ fn initialize_peripherals() -> SerialIO {
         serial::config::Config::default().baudrate(9600.bps()),
         &mut rcc,
     ).unwrap();
-    Rs232Command::init(rs232);
+    Rs232Command::init(rs232, rcc.clocks.pclk1().raw());
 
     // Initialize ADC and DAC for analog operations
     let adc_config = AdcConfig::default();
@@ -207,7 +207,13 @@ fn initialize_peripherals() -> SerialIO {
     let can_tx = gpiod.pd1.into_alternate();
     
     let can1 = dp.CAN1.can((can_tx, can_rx), &mut rcc);
-    CanCommand::init_can(can1);
+    // CAN1 lives on APB1 -- pass the *actual* PCLK1 (not a guessed/hardcoded
+    // value) so bit timing for the default 500 kbps (and any later
+    // `can config`) is computed correctly for whatever prescaler rcc.freeze()
+    // chose for this sysclk/HSE combination.
+    CanCommand::init_can(can1, rcc.clocks.pclk1().raw());
+
+    // CanCommand::init_can(can1);
 
     // Create the USB device
     let usb = USB::new(

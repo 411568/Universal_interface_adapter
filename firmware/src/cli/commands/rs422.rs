@@ -20,6 +20,7 @@ static RS422_TX: Mutex<RefCell<Option<Rs422Tx>>> = Mutex::new(RefCell::new(None)
 static RS422_RE: Mutex<RefCell<Option<RePin>>> = Mutex::new(RefCell::new(None));
 static RS422_DE: Mutex<RefCell<Option<DePin>>> = Mutex::new(RefCell::new(None));
 static RS422_CONFIG: Mutex<RefCell<Rs422Config>> = Mutex::new(RefCell::new(Rs422Config::default()));
+static RS422_PCLK1_HZ: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 #[derive(Clone, Copy)]
 struct Rs422Config {
@@ -46,7 +47,7 @@ impl Rs422Command {
         Self 
     }
 
-    pub fn init(serial: Serial<hal::pac::UART5>, mut re_pin: RePin, mut de_pin: DePin) {
+    pub fn init(serial: Serial<hal::pac::UART5>, mut re_pin: RePin, mut de_pin: DePin, pclk1_hz: u32) {
         // Initialize control pins to safe state (receiver enabled, driver disabled)
         re_pin.set_low(); // Active LOW - enable receiver
         de_pin.set_low(); // Active HIGH - disable driver
@@ -57,7 +58,62 @@ impl Rs422Command {
             *RS422_TX.borrow(cs).borrow_mut() = Some(tx);
             *RS422_RE.borrow(cs).borrow_mut() = Some(re_pin);
             *RS422_DE.borrow(cs).borrow_mut() = Some(de_pin);
+            *RS422_PCLK1_HZ.borrow(cs).borrow_mut() = pclk1_hz;
         });
+    }
+
+    fn apply_hardware_config(&self) -> Result<(), &'static str> {
+        let (reg, pclk1_hz, cfg) = cortex_m::interrupt::free(|cs| {
+            let pclk1_hz = *RS422_PCLK1_HZ.borrow(cs).borrow();
+            let cfg = *RS422_CONFIG.borrow(cs).borrow();
+            let reg = unsafe { &*hal::pac::UART5::ptr() };
+            (reg, pclk1_hz, cfg)
+        });
+
+        if pclk1_hz == 0 {
+            return Err("RS422 clock is not initialized");
+        }
+        if cfg.baud_rate == 0 {
+            return Err("Baud rate must be greater than 0");
+        }
+
+        let brr = (pclk1_hz + (cfg.baud_rate / 2)) / cfg.baud_rate;
+        if brr == 0 || brr > u16::MAX as u32 {
+            return Err("Baud rate is out of range for the selected UART clock");
+        }
+
+        reg.cr1().modify(|_, w| w.ue().clear_bit());
+        reg.brr().write(|w| unsafe { w.bits(brr as u16) });
+
+        reg.cr2().modify(|r, w| {
+            let mut bits = r.bits() & !(0b11 << 12);
+            bits |= match cfg.stop_bits {
+                StopBits::STOP1 => 0b00 << 12,
+                StopBits::STOP2 => 0b10 << 12,
+                _ => 0b00 << 12,
+            };
+            unsafe { w.bits(bits) }
+        });
+
+        reg.cr1().modify(|r, w| {
+            let mut bits = r.bits();
+            bits &= !(1 << 9);
+            bits &= !(1 << 10);
+            match cfg.parity {
+                Parity::ParityNone => {}
+                Parity::ParityEven => {
+                    bits |= 1 << 10;
+                }
+                Parity::ParityOdd => {
+                    bits |= 1 << 10;
+                    bits |= 1 << 9;
+                }
+            }
+            bits |= 1 << 13;
+            unsafe { w.bits(bits) }
+        });
+
+        Ok(())
     }
 
     fn parse_int(&self, arg: &str) -> Result<u32, &'static str> {
@@ -77,6 +133,13 @@ impl Rs422Command {
         cortex_m::interrupt::free(|cs| {
             RS422_CONFIG.borrow(cs).borrow_mut().stop_bits = stop_bits;
         });
+
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -103,6 +166,13 @@ impl Rs422Command {
             RS422_CONFIG.borrow(cs).borrow_mut().parity = parity;
         });
 
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
+
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
         } else {
@@ -120,9 +190,21 @@ impl Rs422Command {
     }
 
     fn set_baud(&self, value: u32, out: &mut SerialIO, cfg: &CliConfig) -> Result<(), UsbError> {
+        if value == 0 {
+            out.write_str("Error: Baud rate must be greater than 0\r\n")?;
+            return Ok(());
+        }
+
         cortex_m::interrupt::free(|cs| {
             RS422_CONFIG.borrow(cs).borrow_mut().baud_rate = value;
         });
+
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -334,7 +416,7 @@ impl Command for Rs422Command {
 
     fn print_help(&self, out: &mut SerialIO) -> Result<(), UsbError> {
         out.write_str("rs422 <subcommand> [args] - RS422 serial communication\r\n")?;
-        out.write_str("RS422 uses UART5 with DE (PB2) and RE (PE9) control pins\r\n")?;
+        out.write_str("RS422 uses UART5 with DE (PB2) and RE (PE9) control pins; baud/parity/stop settings are applied via BRR/CR1/CR2 registers\r\n")?;
         out.write_str("Subcommands:\r\n")?;
         out.write_str("  stop_bit <1|2>    - Set stop bits (1 or 2)\r\n")?;
         out.write_str("  parity <0|1|2>    - Set parity (0=none, 1=even, 2=odd)\r\n")?;

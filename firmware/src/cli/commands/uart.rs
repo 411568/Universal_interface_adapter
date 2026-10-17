@@ -18,11 +18,13 @@ type Uart2Tx = Tx<hal::pac::UART4>;
 static UART1_RX: Mutex<RefCell<Option<Uart1Rx>>> = Mutex::new(RefCell::new(None));
 static UART1_TX: Mutex<RefCell<Option<Uart1Tx>>> = Mutex::new(RefCell::new(None));
 static UART1_CONFIG: Mutex<RefCell<UartConfig>> = Mutex::new(RefCell::new(UartConfig::default()));
+static UART1_PCLK1_HZ: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 // UART 2 (USART3)
 static UART2_RX: Mutex<RefCell<Option<Uart2Rx>>> = Mutex::new(RefCell::new(None));
 static UART2_TX: Mutex<RefCell<Option<Uart2Tx>>> = Mutex::new(RefCell::new(None));
 static UART2_CONFIG: Mutex<RefCell<UartConfig>> = Mutex::new(RefCell::new(UartConfig::default()));
+static UART2_PCLK1_HZ: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 #[derive(Clone, Copy)]
 struct UartConfig {
@@ -49,20 +51,113 @@ impl UartCommand {
         Self 
     }
 
-    pub fn init_uart1(serial: Serial<hal::pac::USART2>) {
+    pub fn init_uart1(serial: Serial<hal::pac::USART2>, pclk1_hz: u32) {
         let (tx, rx) = serial.split();
         cortex_m::interrupt::free(|cs| {
             *UART1_RX.borrow(cs).borrow_mut() = Some(rx);
             *UART1_TX.borrow(cs).borrow_mut() = Some(tx);
+            *UART1_PCLK1_HZ.borrow(cs).borrow_mut() = pclk1_hz;
         });
     }
 
-    pub fn init_uart2(serial: Serial<hal::pac::UART4>) {
+    pub fn init_uart2(serial: Serial<hal::pac::UART4>, pclk1_hz: u32) {
         let (tx, rx) = serial.split();
         cortex_m::interrupt::free(|cs| {
             *UART2_RX.borrow(cs).borrow_mut() = Some(rx);
             *UART2_TX.borrow(cs).borrow_mut() = Some(tx);
+            *UART2_PCLK1_HZ.borrow(cs).borrow_mut() = pclk1_hz;
         });
+    }
+
+    fn apply_hardware_config(&self, uart_num: u8) -> Result<(), &'static str> {
+        let (pclk1_hz, cfg) = cortex_m::interrupt::free(|cs| match uart_num {
+            1 => (*UART1_PCLK1_HZ.borrow(cs).borrow(), *UART1_CONFIG.borrow(cs).borrow()),
+            2 => (*UART2_PCLK1_HZ.borrow(cs).borrow(), *UART2_CONFIG.borrow(cs).borrow()),
+            _ => (0, UartConfig::default()),
+        });
+
+        if uart_num != 1 && uart_num != 2 {
+            return Err("Invalid UART number");
+        }
+        if pclk1_hz == 0 {
+            return Err("UART clock is not initialized");
+        }
+        if cfg.baud_rate == 0 {
+            return Err("Baud rate must be greater than 0");
+        }
+
+        let brr = (pclk1_hz + (cfg.baud_rate / 2)) / cfg.baud_rate;
+        if brr == 0 || brr > u16::MAX as u32 {
+            return Err("Baud rate is out of range for the selected UART clock");
+        }
+
+        match uart_num {
+            1 => {
+                let reg = unsafe { &*hal::pac::USART2::ptr() };
+                reg.cr1().modify(|_, w| w.ue().clear_bit());
+                reg.brr().write(|w| unsafe { w.bits(brr as u16) });
+                reg.cr2().modify(|r, w| {
+                    let mut bits = r.bits() & !(0b11 << 12);
+                    bits |= match cfg.stop_bits {
+                        StopBits::STOP1 => 0b00 << 12,
+                        StopBits::STOP2 => 0b10 << 12,
+                        _ => 0b00 << 12,
+                    };
+                    unsafe { w.bits(bits) }
+                });
+                reg.cr1().modify(|r, w| {
+                    let mut bits = r.bits();
+                    bits &= !(1 << 9);
+                    bits &= !(1 << 10);
+                    match cfg.parity {
+                        Parity::ParityNone => {}
+                        Parity::ParityEven => {
+                            bits |= 1 << 10;
+                        }
+                        Parity::ParityOdd => {
+                            bits |= 1 << 10;
+                            bits |= 1 << 9;
+                        }
+                    }
+                    bits |= 1 << 13;
+                    unsafe { w.bits(bits) }
+                });
+            }
+            2 => {
+                let reg = unsafe { &*hal::pac::UART4::ptr() };
+                reg.cr1().modify(|_, w| w.ue().clear_bit());
+                reg.brr().write(|w| unsafe { w.bits(brr as u16) });
+                reg.cr2().modify(|r, w| {
+                    let mut bits = r.bits() & !(0b11 << 12);
+                    bits |= match cfg.stop_bits {
+                        StopBits::STOP1 => 0b00 << 12,
+                        StopBits::STOP2 => 0b10 << 12,
+                        _ => 0b00 << 12,
+                    };
+                    unsafe { w.bits(bits) }
+                });
+                reg.cr1().modify(|r, w| {
+                    let mut bits = r.bits();
+                    bits &= !(1 << 9);
+                    bits &= !(1 << 10);
+                    match cfg.parity {
+                        Parity::ParityNone => {}
+                        Parity::ParityEven => {
+                            bits |= 1 << 10;
+                        }
+                        Parity::ParityOdd => {
+                            bits |= 1 << 10;
+                            bits |= 1 << 9;
+                        }
+                    }
+                    bits |= 1 << 13;
+                    unsafe { w.bits(bits) }
+                });
+            }
+            _ => return Err("Invalid UART number"),
+        }
+
+        Ok(())
     }
 
     fn parse_int(&self, arg: &str) -> Result<u32, &'static str> {
@@ -95,6 +190,13 @@ impl UartCommand {
             }
         });
 
+        if let Err(e) = self.apply_hardware_config(uart_num) {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
+
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
         } else {
@@ -126,6 +228,13 @@ impl UartCommand {
             }
         });
 
+        if let Err(e) = self.apply_hardware_config(uart_num) {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
+
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
         } else {
@@ -145,6 +254,11 @@ impl UartCommand {
     }
 
     fn set_baud(&self, uart_num: u8, value: u32, out: &mut SerialIO, cfg: &CliConfig) -> Result<(), UsbError> {
+        if value == 0 {
+            out.write_str("Error: Baud rate must be greater than 0\r\n")?;
+            return Ok(());
+        }
+
         cortex_m::interrupt::free(|cs| {
             match uart_num {
                 1 => UART1_CONFIG.borrow(cs).borrow_mut().baud_rate = value,
@@ -152,6 +266,13 @@ impl UartCommand {
                 _ => {}
             }
         });
+
+        if let Err(e) = self.apply_hardware_config(uart_num) {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -419,7 +540,7 @@ impl Command for UartCommand {
 
     fn print_help(&self, out: &mut SerialIO) -> Result<(), UsbError> {
         out.write_str("uart <1|2> <subcommand> [args] - UART/Serial communication\r\n")?;
-        out.write_str("UART 1 = USART2, UART 2 = UART4\r\n")?;
+        out.write_str("UART 1 = USART2, UART 2 = UART4; baud/parity/stop settings are applied via BRR/CR1/CR2 registers\r\n")?;
         out.write_str("Subcommands:\r\n")?;
         out.write_str("  stop_bit <1|2>    - Set stop bits (1 or 2)\r\n")?;
         out.write_str("  parity <0|1|2>    - Set parity (0=none, 1=even, 2=odd)\r\n")?;

@@ -15,12 +15,14 @@ type Rs232Tx = Tx<hal::pac::USART3>;
 static RS232_RX: Mutex<RefCell<Option<Rs232Rx>>> = Mutex::new(RefCell::new(None));
 static RS232_TX: Mutex<RefCell<Option<Rs232Tx>>> = Mutex::new(RefCell::new(None));
 static RS232_CONFIG: Mutex<RefCell<Rs232Config>> = Mutex::new(RefCell::new(Rs232Config::default()));
+static RS232_PCLK1_HZ: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 #[derive(Clone, Copy)]
 struct Rs232Config {
     baud_rate: u32,
     parity: Parity,
     stop_bits: StopBits,
+    append_cr: bool,
 }
 
 impl Rs232Config {
@@ -29,6 +31,7 @@ impl Rs232Config {
             baud_rate: 9600,
             parity: Parity::ParityNone,
             stop_bits: StopBits::STOP1,
+            append_cr: false,
         }
     }
 }
@@ -41,12 +44,73 @@ impl Rs232Command {
         Self 
     }
 
-    pub fn init(serial: Serial<hal::pac::USART3>) {
+    pub fn init(serial: Serial<hal::pac::USART3>, pclk1_hz: u32) {
         let (tx, rx) = serial.split();
         cortex_m::interrupt::free(|cs| {
             *RS232_RX.borrow(cs).borrow_mut() = Some(rx);
             *RS232_TX.borrow(cs).borrow_mut() = Some(tx);
+            *RS232_PCLK1_HZ.borrow(cs).borrow_mut() = pclk1_hz;
         });
+    }
+
+    fn apply_hardware_config(&self) -> Result<(), &'static str> {
+        cortex_m::interrupt::free(|cs| {
+            let cfg = *RS232_CONFIG.borrow(cs).borrow();
+            let pclk1_hz = *RS232_PCLK1_HZ.borrow(cs).borrow();
+
+            if pclk1_hz == 0 {
+                return Err("RS232 clock is not initialized");
+            }
+            if cfg.baud_rate == 0 {
+                return Err("Baud rate must be greater than 0");
+            }
+
+            let brr = (pclk1_hz + (cfg.baud_rate / 2)) / cfg.baud_rate;
+            if brr == 0 {
+                return Err("Baud rate is too high for current peripheral clock");
+            }
+            if brr > u16::MAX as u32 {
+                return Err("Baud rate is too low for current peripheral clock");
+            }
+            let brr = brr as u16;
+
+            let usart3 = unsafe { &*hal::pac::USART3::ptr() };
+
+            // Disable UART before touching format/baud bits, then restore UE.
+            usart3.cr1().modify(|_, w| w.ue().clear_bit());
+
+            usart3.brr().write(|w| unsafe { w.bits(brr) });
+
+            usart3.cr2().modify(|r, w| {
+                let mut bits = r.bits() & !(0b11 << 12);
+                bits |= match cfg.stop_bits {
+                    StopBits::STOP1 => 0b00 << 12,
+                    StopBits::STOP2 => 0b10 << 12,
+                    _ => 0b00 << 12,
+                };
+                unsafe { w.bits(bits) }
+            });
+
+            usart3.cr1().modify(|r, w| {
+                let mut bits = r.bits();
+                bits &= !(1 << 9); // PS
+                bits &= !(1 << 10); // PCE
+                match cfg.parity {
+                    Parity::ParityNone => {}
+                    Parity::ParityEven => {
+                        bits |= 1 << 10;
+                    }
+                    Parity::ParityOdd => {
+                        bits |= 1 << 10;
+                        bits |= 1 << 9;
+                    }
+                }
+                bits |= 1 << 13; // UE
+                unsafe { w.bits(bits) }
+            });
+
+            Ok(())
+        })
     }
 
     fn parse_int(&self, arg: &str) -> Result<u32, &'static str> {
@@ -66,6 +130,12 @@ impl Rs232Command {
         cortex_m::interrupt::free(|cs| {
             RS232_CONFIG.borrow(cs).borrow_mut().stop_bits = stop_bits;
         });
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -91,6 +161,12 @@ impl Rs232Command {
         cortex_m::interrupt::free(|cs| {
             RS232_CONFIG.borrow(cs).borrow_mut().parity = parity;
         });
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -109,9 +185,20 @@ impl Rs232Command {
     }
 
     fn set_baud(&self, value: u32, out: &mut SerialIO, cfg: &CliConfig) -> Result<(), UsbError> {
+        if value == 0 {
+            out.write_str("Error: Baud rate must be greater than 0\r\n")?;
+            return Ok(());
+        }
+
         cortex_m::interrupt::free(|cs| {
             RS232_CONFIG.borrow(cs).borrow_mut().baud_rate = value;
         });
+        if let Err(e) = self.apply_hardware_config() {
+            out.write_str("Error: ")?;
+            out.write_str(e)?;
+            out.write_str("\r\n")?;
+            return Ok(());
+        }
 
         if cfg.is_short_output() {
             out.write_str("OK\r\n")?;
@@ -126,8 +213,33 @@ impl Rs232Command {
         Ok(())
     }
 
+    fn set_cr(&self, value: u32, out: &mut SerialIO, cfg: &CliConfig) -> Result<(), UsbError> {
+        let append_cr = match value {
+            0 => false,
+            1 => true,
+            _ => {
+                out.write_str("Error: CR mode must be 0 (disabled) or 1 (enabled)\r\n")?;
+                return Ok(());
+            }
+        };
+
+        cortex_m::interrupt::free(|cs| {
+            RS232_CONFIG.borrow(cs).borrow_mut().append_cr = append_cr;
+        });
+
+        if cfg.is_short_output() {
+            out.write_str("OK\r\n")?;
+        } else {
+            out.write_str("RS232 CR append ")?;
+            out.write_str(if append_cr { "enabled" } else { "disabled" })?;
+            out.write_str("\r\n")?;
+        }
+        Ok(())
+    }
+
     fn write_string(&self, args: &[&str], out: &mut SerialIO, cfg: &CliConfig) -> Result<(), UsbError> {
         cortex_m::interrupt::free(|cs| {
+            let append_cr = RS232_CONFIG.borrow(cs).borrow().append_cr;
             if let Some(tx) = RS232_TX.borrow(cs).borrow_mut().as_mut() {
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
@@ -138,6 +250,9 @@ impl Rs232Command {
                     for &b in arg.as_bytes() {
                         let _ = block!(tx.write(b));
                     }
+                }
+                if append_cr {
+                    let _ = block!(tx.write(b'\r'));
                 }
             }
         });
@@ -204,7 +319,7 @@ impl Command for Rs232Command {
         cfg: &mut CliConfig,
     ) -> Result<(), UsbError> {
         if args.is_empty() {
-            out.write_str("Usage: rs232 <stop_bit|parity|baud|write|passthrough> [args]\r\n")?;
+            out.write_str("Usage: rs232 <stop_bit|parity|baud|cr|write|passthrough> [args]\r\n")?;
             out.write_str("Type 'help rs232' for more information\r\n")?;
             return Ok(());
         }
@@ -257,6 +372,22 @@ impl Command for Rs232Command {
                 };
                 self.set_baud(value, out, cfg)
             }
+            "cr" => {
+                if args.len() != 2 {
+                    out.write_str("Usage: rs232 cr <0|1>\r\n")?;
+                    out.write_str("  0 = Disabled, 1 = Enabled\r\n")?;
+                    return Ok(());
+                }
+                let value = match self.parse_int(args[1]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        out.write_str(e)?;
+                        out.write_str("\r\n")?;
+                        return Ok(());
+                    }
+                };
+                self.set_cr(value, out, cfg)
+            }
             "write" => {
                 if args.len() < 2 {
                     out.write_str("Usage: rs232 write <text>\r\n")?;
@@ -275,7 +406,7 @@ impl Command for Rs232Command {
                 out.write_str("Unknown subcommand: ")?;
                 out.write_str(args[0])?;
                 out.write_str("\r\n")?;
-                out.write_str("Available: stop_bit, parity, baud, write, passthrough\r\n")?;
+                out.write_str("Available: stop_bit, parity, baud, cr, write, passthrough\r\n")?;
                 Ok(())
             }
         }
@@ -283,15 +414,17 @@ impl Command for Rs232Command {
 
     fn print_help(&self, out: &mut SerialIO) -> Result<(), UsbError> {
         out.write_str("rs232 <subcommand> [args] - RS232 serial communication\r\n")?;
-        out.write_str("RS232 uses USART3\r\n")?;
+        out.write_str("RS232 uses USART3 and applies baud/parity/stop settings via BRR/CR1/CR2 registers\r\n")?;
         out.write_str("Subcommands:\r\n")?;
         out.write_str("  stop_bit <1|2>    - Set stop bits (1 or 2)\r\n")?;
         out.write_str("  parity <0|1|2>    - Set parity (0=none, 1=even, 2=odd)\r\n")?;
         out.write_str("  baud <rate>       - Set baud rate (e.g., 9600, 115200)\r\n")?;
+        out.write_str("  cr <0|1>          - Append CR (\\r) after each write (0=off, 1=on)\r\n")?;
         out.write_str("  write <text>      - Write string to RS232 TX\r\n")?;
         out.write_str("  passthrough       - Enter passthrough mode (ESC to exit)\r\n")?;
         out.write_str("\r\nExamples:\r\n")?;
         out.write_str("  rs232 baud 115200\r\n")?;
+        out.write_str("  rs232 cr 1\r\n")?;
         out.write_str("  rs232 write Hello World\r\n")?;
         out.write_str("  rs232 passthrough\r\n")?;
         Ok(())
